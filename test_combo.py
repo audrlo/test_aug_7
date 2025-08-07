@@ -4,6 +4,15 @@ import numpy as np
 import cv2
 import time
 
+roboclaw = Roboclaw("/dev/ttyACM0", 115200)
+roboclaw.Open()
+
+address = 0x80
+
+result, version = roboclaw.ReadVersion(address)
+print("Success:", result)
+print("Version:", version)
+
 
 def get_center_distance(depth_frame: rs.depth_frame) -> float:
     """Return distance at image center in meters. Returns float('inf') if invalid."""
