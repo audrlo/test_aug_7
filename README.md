@@ -16,3 +16,30 @@ This code has been updated from the original Python 2 version to be fully compat
 ## Original Documentation
 
 The accompanying Application Note can be [found here](https://resources.basicmicro.com/packet-serial-with-the-raspberry-pi-3/).
+
+## Quick start (Python 3)
+
+1. Create and activate a virtual environment (recommended):
+
+   - macOS/Linux:
+     ```sh
+     python3 -m venv .venv
+     source .venv/bin/activate
+     ```
+   - Windows (PowerShell):
+     ```powershell
+     py -3 -m venv .venv
+     .venv\Scripts\Activate.ps1
+     ```
+
+2. Install dependencies:
+
+   ```sh
+   pip install -r requirements.txt
+   ```
+
+3. Run any script with Python 3:
+
+   ```sh
+   python3 test_combo.py
+   ```

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from roboclaw import Roboclaw
 import pyrealsense2 as rs
 import numpy as np
@@ -12,7 +13,6 @@ address = 0x80
 result, version = roboclaw.ReadVersion(address)
 print("Success:", result)
 print("Version:", version)
-
 
 def get_center_distance(depth_frame: rs.depth_frame) -> float:
     """Return distance at image center in meters. Returns float('inf') if invalid."""
