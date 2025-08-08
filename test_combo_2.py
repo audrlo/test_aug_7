@@ -55,8 +55,8 @@ def turn_left_until_clear(
     # Left wheel backward (M1 negative), right wheel forward (M2 negative)
     # Half speed (of half speed bruh) for slow turning. Experiment with hard coded values in line 58-59 and line 61.
     
-    roboclaw.SpeedM1(address, 0.5 * -turn_qpps) 
-    roboclaw.SpeedM2(address, 0.5 *-turn_qpps) 
+    roboclaw.SpeedM1(address, -turn_qpps) 
+    roboclaw.SpeedM2(address, -turn_qpps) 
     print("Turning left until clear")
     time.sleep(1) # wait 1 second to let the robot turn left
     while True:
