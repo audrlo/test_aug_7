@@ -3,6 +3,7 @@ import pyrealsense2 as rs
 import numpy as np
 import cv2
 import time
+import random
 
 # does this need to be here?
 
@@ -48,6 +49,7 @@ def ramp_forward_to_half_speed(roboclaw: Roboclaw, address: int, target_qpps: in
         set_forward_speed(roboclaw, address, qpps)
         time.sleep(step_delay_s)
 
+#Rename later to 'turn randomly'
 
 def turn_left_until_clear(
     roboclaw: Roboclaw,
@@ -60,9 +62,12 @@ def turn_left_until_clear(
     # Differential turn-in-place left using the project's sign convention
     # Left wheel backward (M1 negative), right wheel forward (M2 negative)
     # Half speed (of half speed bruh) for slow turning. Experiment with hard coded values in line 58-59 and line 61.
+
+    #Random number to choose direction
+    direction = random.randint(0, 1)*2 - 1
     
-    roboclaw.SpeedM1(address, -turn_qpps) 
-    roboclaw.SpeedM2(address, -turn_qpps) 
+    roboclaw.SpeedM1(address, direction * turn_qpps) 
+    roboclaw.SpeedM2(address, direction * turn_qpps) 
     print("Turning left until clear")
     time.sleep(1) # wait 1 second to let the robot turn left
     while True:
