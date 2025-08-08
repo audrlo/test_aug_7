@@ -96,7 +96,7 @@ def main() -> None:
     pipeline.start(config)
 
     # Control parameters (mirroring increments from test_version_2.py)
-    RAMP_STEP_QPPS = 100  # same increment used in test_version_2.py loops, this was 500 before
+    RAMP_STEP_QPPS = 50  # same increment used in test_version_2.py loops, this was 500 before
     FORWARD_TARGET_QPPS = RAMP_STEP_QPPS * 20  # treat as ~"half speed" target in QPPS, this was 500 before
     TURN_QPPS = RAMP_STEP_QPPS * 10  # turning speed magnitude, this was 500 before
     RAMP_STEP_DELAY_S = 0.05
