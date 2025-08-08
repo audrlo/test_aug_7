@@ -6,7 +6,7 @@ import time
 
 # does this need to be here?
 
-roboclaw = Roboclaw("/dev/ttyACM0", 115200) # should this be /dev/ttyUSB0? and 38400?
+roboclaw = Roboclaw("/dev/ttyACM0", 38400) # should this be /dev/ttyUSB0? and 38400?
 roboclaw.Open()
 
 address = 0x80
@@ -85,9 +85,9 @@ def main() -> None:
     pipeline.start(config)
 
     # Control parameters (mirroring increments from test_version_2.py)
-    RAMP_STEP_QPPS = 500  # same increment used in test_version_2.py loops
-    FORWARD_TARGET_QPPS = 500 * 20  # treat as ~"half speed" target in QPPS
-    TURN_QPPS = 500 * 10  # turning speed magnitude
+    RAMP_STEP_QPPS = 250  # same increment used in test_version_2.py loops, this was 500 before
+    FORWARD_TARGET_QPPS = 250 * 20  # treat as ~"half speed" target in QPPS, this was 500 before
+    TURN_QPPS = 250 * 10  # turning speed magnitude, this was 500 before
     RAMP_STEP_DELAY_S = 0.05
     OBSTACLE_METERS = 1.0
     CHECK_INTERVAL_S = 0.05
