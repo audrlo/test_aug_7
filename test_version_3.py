@@ -1,7 +1,7 @@
 from roboclaw import Roboclaw
 import time
 
-roboclaw = Roboclaw("/dev/ttyACM0", 115200)
+roboclaw = Roboclaw("/dev/ttyACM0", 38400)
 roboclaw.Open()
 
 address = 0x80
