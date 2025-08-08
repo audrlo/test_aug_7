@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from roboclaw import Roboclaw
 from time import sleep
 

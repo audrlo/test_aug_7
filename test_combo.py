@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from roboclaw import Roboclaw
 import pyrealsense2 as rs
 import numpy as np

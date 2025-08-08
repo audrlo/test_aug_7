@@ -53,7 +53,7 @@ def turn_left_until_clear(
 ) -> None:
     # Differential turn-in-place left using the project's sign convention
     # Left wheel backward (M1 negative), right wheel forward (M2 negative)
-    # Half speed for slow turning. Experiment with hard coded values in line 58-59 and line 61.
+    # Half speed (of half speed bruh) for slow turning. Experiment with hard coded values in line 58-59 and line 61.
     
     roboclaw.SpeedM1(address, 0.5 * -turn_qpps) 
     roboclaw.SpeedM2(address, 0.5 *-turn_qpps) 
