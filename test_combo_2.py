@@ -71,7 +71,7 @@ def turn_left_until_clear(
 
 def main() -> None:
     # Motor controller setup
-    roboclaw = Roboclaw("/dev/ttyACM0", 115200)
+    roboclaw = Roboclaw("/dev/ttyACM0", 38400)
     roboclaw.Open()
     address = 0x80
 
@@ -85,12 +85,14 @@ def main() -> None:
     pipeline.start(config)
 
     # Control parameters (mirroring increments from test_version_2.py)
-    RAMP_STEP_QPPS = 250  # same increment used in test_version_2.py loops, this was 500 before
-    FORWARD_TARGET_QPPS = 250 * 20  # treat as ~"half speed" target in QPPS, this was 500 before
-    TURN_QPPS = 250 * 10  # turning speed magnitude, this was 500 before
+    RAMP_STEP_QPPS = 100  # same increment used in test_version_2.py loops, this was 500 before
+    FORWARD_TARGET_QPPS = RAMP_STEP_QPPS * 20  # treat as ~"half speed" target in QPPS, this was 500 before
+    TURN_QPPS = RAMP_STEP_QPPS * 10  # turning speed magnitude, this was 500 before
     RAMP_STEP_DELAY_S = 0.05
     OBSTACLE_METERS = 1.0
+    SLOW_METERS = 3.0
     CHECK_INTERVAL_S = 0.05
+    SLOW_FORWARD_TARGET_QPPS = 500
 
     try:
         # Initial forward ramp
@@ -116,8 +118,10 @@ def main() -> None:
                 )
                 ramp_forward_to_half_speed(roboclaw, address, FORWARD_TARGET_QPPS, RAMP_STEP_QPPS, RAMP_STEP_DELAY_S)
             else:
-                # Keep commanding forward at target (ensures recovery if any slip)
+                if center_distance <= SLOW_METERS:
+                    set_forward_speed(roboclaw, address, SLOW_FORWARD_TARGET_QPPS)
                 set_forward_speed(roboclaw, address, FORWARD_TARGET_QPPS)
+                
 
             time.sleep(CHECK_INTERVAL_S)
 
