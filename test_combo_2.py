@@ -120,7 +120,8 @@ def main() -> None:
             else:
                 if center_distance <= SLOW_METERS:
                     set_forward_speed(roboclaw, address, SLOW_FORWARD_TARGET_QPPS)
-                set_forward_speed(roboclaw, address, FORWARD_TARGET_QPPS)
+                else:
+                    set_forward_speed(roboclaw, address, FORWARD_TARGET_QPPS)
                 
 
             time.sleep(CHECK_INTERVAL_S)
