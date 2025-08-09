@@ -66,10 +66,9 @@ def turn_left_until_clear(
     # Half speed (of half speed bruh) for slow turning. Experiment with hard coded values in line 58-59 and line 61.
 
     #Random number to choose direction
-    direction = random.randint(0, 1)*2 - 1
     
-    roboclaw.SpeedM1(address, direction * turn_qpps) 
-    roboclaw.SpeedM2(address, direction * turn_qpps) 
+    roboclaw.SpeedM1(address, -turn_qpps) 
+    roboclaw.SpeedM2(address, -turn_qpps) 
     print("Turning left until clear")
     while True:
         frames = pipeline.wait_for_frames()
