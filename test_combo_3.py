@@ -30,7 +30,7 @@ def get_center_distance(depth_frame: rs.depth_frame) -> float:
             y = (height // 2) - 50 + j
             distance_meters = min(depth_frame.get_distance(x, y), distance_meters)
 
-    return distance_meters if distance_meters > 0 else float("inf")
+    return distance_meters #if distance_meters > 0 else float("inf")
 
 
 def set_forward_speed(roboclaw: Roboclaw, address: int, qpps: int) -> None:
