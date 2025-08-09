@@ -71,7 +71,6 @@ def turn_left_until_clear(
     roboclaw.SpeedM1(address, direction * turn_qpps) 
     roboclaw.SpeedM2(address, direction * turn_qpps) 
     print("Turning left until clear")
-    time.sleep(1) # wait 1 second to let the robot turn left
     while True:
         frames = pipeline.wait_for_frames()
         depth = frames.get_depth_frame()
