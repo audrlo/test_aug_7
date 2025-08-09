@@ -28,7 +28,9 @@ def get_center_distance(depth_frame: rs.depth_frame) -> float:
         for j in range(101):
             x = (width // 2) - 100 + i
             y = (height // 2) - 50 + j
-            distance_meters = min(depth_frame.get_distance(x, y), distance_meters)
+            d = depth_frame.get_distance(x, y)
+            if d > 0:
+                distance_meters = min(d, distance_meters)
 
     return distance_meters #if distance_meters > 0 else float("inf")
 
