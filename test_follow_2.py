@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import math
 import threading
+import glob
+import os
 
 
 @dataclass
@@ -41,25 +43,118 @@ class RoboClawConnectionManager:
         self.heartbeat_thread = None
         self.stop_heartbeat = False
         
+    def find_roboclaw_ports(self):
+        """Scan for available RoboClaw devices on common USB ports"""
+        possible_ports = []
+        
+        # Common USB serial port patterns
+        port_patterns = [
+            "/dev/ttyACM*",  # Arduino-style devices
+            "/dev/ttyUSB*",  # USB-to-serial converters
+            "/dev/ttyS*",    # Serial ports
+        ]
+        
+        for pattern in port_patterns:
+            ports = glob.glob(pattern)
+            possible_ports.extend(ports)
+        
+        # Sort ports to prefer ttyACM* over others
+        possible_ports.sort(key=lambda x: (x.startswith("/dev/ttyACM"), x))
+        
+        return possible_ports
+    
+    def test_roboclaw_connection(self, port):
+        """Test if a specific port has a RoboClaw device"""
+        try:
+            test_roboclaw = Roboclaw(port, self.baudrate)
+            test_roboclaw.Open()
+            
+            # Try to read version to verify it's a RoboClaw
+            result, version = test_roboclaw.ReadVersion(self.address)
+            test_roboclaw.Close()
+            
+            if result:
+                print(f"Found RoboClaw on {port} with version: {version}")
+                return True, version
+            else:
+                return False, None
+                
+        except Exception as e:
+            return False, None
+    
+    def scan_and_connect(self):
+        """Scan all available ports and connect to the first working RoboClaw"""
+        print("Scanning for RoboClaw devices...")
+        available_ports = self.find_roboclaw_ports()
+        
+        if not available_ports:
+            print("No USB serial ports found")
+            return False
+        
+        print(f"Found {len(available_ports)} potential ports: {available_ports}")
+        
+        # Try each port
+        for port in available_ports:
+            print(f"Testing port: {port}")
+            is_roboclaw, version = self.test_roboclaw_connection(port)
+            
+            if is_roboclaw:
+                # Found a working RoboClaw, connect to it
+                try:
+                    self.roboclaw = Roboclaw(port, self.baudrate)
+                    self.roboclaw.Open()
+                    
+                    # Verify connection
+                    result, version = self.roboclaw.ReadVersion(self.address)
+                    if result:
+                        self.port = port  # Update the port to the working one
+                        self.connected = True
+                        print(f"Successfully connected to RoboClaw on {port} with version: {version}")
+                        return True
+                    else:
+                        self.roboclaw.Close()
+                        self.roboclaw = None
+                        
+                except Exception as e:
+                    print(f"Failed to connect to {port}: {e}")
+                    if self.roboclaw:
+                        try:
+                            self.roboclaw.Close()
+                        except:
+                            pass
+                        self.roboclaw = None
+        
+        print("No working RoboClaw found on any port")
+        return False
+    
     def wait_for_connection(self, max_retries=None, retry_delay=2.0):
         """Wait for RoboClaw to connect, with optional retry limit"""
         retry_count = 0
         while max_retries is None or retry_count < max_retries:
             try:
-                print(f"Attempting to connect to RoboClaw on {self.port}...")
-                self.roboclaw = Roboclaw(self.port, self.baudrate)
-                self.roboclaw.Open()
+                print(f"Attempting to connect to RoboClaw...")
                 
-                # Test connection by reading version
-                result, version = self.roboclaw.ReadVersion(self.address)
-                if result:
-                    self.connected = True
-                    print(f"RoboClaw connected successfully! Version: {version}")
+                # First try the original port
+                if os.path.exists(self.port):
+                    print(f"Trying original port: {self.port}")
+                    self.roboclaw = Roboclaw(self.port, self.baudrate)
+                    self.roboclaw.Open()
+                    
+                    # Test connection by reading version
+                    result, version = self.roboclaw.ReadVersion(self.address)
+                    if result:
+                        self.connected = True
+                        print(f"RoboClaw connected successfully on {self.port}! Version: {version}")
+                        self.start_heartbeat()
+                        return True
+                    else:
+                        print("Failed to read RoboClaw version on original port, trying other ports...")
+                        self.roboclaw.Close()
+                
+                # If original port failed, scan all ports
+                if self.scan_and_connect():
                     self.start_heartbeat()
                     return True
-                else:
-                    print("Failed to read RoboClaw version, retrying...")
-                    self.roboclaw.Close()
                     
             except Exception as e:
                 print(f"Connection attempt failed: {e}")
