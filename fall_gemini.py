@@ -9,7 +9,7 @@ import io
 import numpy as np
 
 # Configure Gemini API
-genai.configure(api_key="AIzaSyDDymHfa1CA6WnKIiwhuFa3qAFCnRIqJ7w")
+genai.configure(api_key="YOUR_API_KEY")
 model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
 # MediaPipe setup
