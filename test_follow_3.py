@@ -112,7 +112,7 @@ class RoboClawConnectionManager:
                     if result:
                         print(f"  ✓ Successfully communicated with RoboClaw on {port} at address 0x{addr:02X}")
                         print(f"  ✓ RoboClaw version: {version}")
-                        test_roboclaw.Close()
+                        test_roboclaw.close()
                         return True, version, addr
                     else:
                         print(f"    ✗ No response from address 0x{addr:02X}")
@@ -122,13 +122,13 @@ class RoboClawConnectionManager:
                     continue
             
             print(f"  ✗ No RoboClaw found on {port} with any address")
-            test_roboclaw.Close()
+            test_roboclaw.close()
             return False, None, None
                 
         except Exception as e:
             print(f"  ✗ Exception on {port}: {e}")
             try:
-                test_roboclaw.Close()
+                test_roboclaw.close()
             except:
                 pass
             return False, None, None
@@ -170,7 +170,7 @@ class RoboClawConnectionManager:
                         return True
                     else:
                         print(f"Failed to verify connection on {port}")
-                        self.roboclaw.Close()
+                        self.roboclaw.close()
                         self.roboclaw = None
                         
                 except Exception as e:
@@ -207,7 +207,7 @@ class RoboClawConnectionManager:
                         return True
                     else:
                         print("Failed to read RoboClaw version on original port, trying other ports...")
-                        self.roboclaw.Close()
+                        self.roboclaw.close()
                 
                 # If original port failed, scan all ports
                 if self.scan_and_connect():
