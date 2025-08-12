@@ -324,10 +324,10 @@ class HumanFollowingRobot:
         
         # Control parameters (following avoid_obstacle.py conventions)
         self.RAMP_STEP_QPPS = 20  # Smaller steps for smoother ramping
-        self.FORWARD_TARGET_QPPS = 50 * 20  # ~"half speed" target
-        self.TURN_QPPS = 50 * 10  # turning speed magnitude
+        self.FORWARD_TARGET_QPPS = 50 * 40  # ~"full speed" target (doubled from 20)
+        self.TURN_QPPS = 50 * 20  # turning speed magnitude (doubled from 10)
         self.RAMP_STEP_DELAY_S = 0.02  # Faster updates for smoother movement
-        self.OBSTACLE_METERS = 1.0  # minimum safe distance
+        self.OBSTACLE_METERS = 0.5  # minimum safe distance (reduced from 1.0)
         self.PERSON_FOLLOW_DISTANCE = 1.0  # target following distance
         self.CHECK_INTERVAL_S = 0.05
         
