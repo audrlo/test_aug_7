@@ -617,10 +617,12 @@ class HumanFollowingRobot:
                     else:
                         # No person, no obstacles - slowly spin to find someone
                         print("No person detected, slowly spinning to search...")
-                        self.roboclaw.SpeedM1(self.address, -self.TURN_QPPS // 4)  # Slow left turn
-                        self.roboclaw.SpeedM2(self.address, -self.TURN_QPPS // 4)
-                        time.sleep(3)  # Spin for 3 seconds
-                        self.stop_both()
+                        roboclaw = self.connection_manager.get_roboclaw()
+                        if roboclaw:
+                            roboclaw.SpeedM1(self.address, -self.TURN_QPPS // 4)  # Slow left turn
+                            roboclaw.SpeedM2(self.address, -self.TURN_QPPS // 4)
+                            time.sleep(3)  # Spin for 3 seconds
+                            self.stop_both()
                 
                 # Display debug info
                 self.display_debug_info(rgb_image, people, obstacles)
