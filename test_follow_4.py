@@ -71,10 +71,11 @@ class RoboClawConnectionManager:
         """Scan for available RoboClaw devices on common USB ports"""
         possible_ports = []
         
-        # Only check ttyACM0 and ttyACM1 as requested
+        # Only check ttyACM0, ttyACM1, and ttyACM2 as requested
         port_patterns = [
             "/dev/ttyACM0",
             "/dev/ttyACM1",
+            "/dev/ttyACM2",
         ]
         
         for port in port_patterns:
