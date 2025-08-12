@@ -10,6 +10,9 @@ import math
 import threading
 import glob
 import os
+import numpy as np
+from scipy.interpolate import CubicSpline
+from collections import deque
 
 
 @dataclass
@@ -334,6 +337,24 @@ class HumanFollowingRobot:
         self.SMOOTHING_FACTOR = 0.3  # how much to smooth speed changes (0-1)
         self.MAX_ACCELERATION = 50 * 5  # maximum speed change per update
         
+        # Advanced interpolation parameters
+        self.TRAJECTORY_POINTS = 50  # number of points in trajectory
+        self.TRAJECTORY_TIME = 2.0  # seconds to plan ahead
+        self.S_CURVE_ACCEL = True  # use S-curve acceleration profiles
+        self.CUBIC_SPLINE_SMOOTHING = True  # use cubic splines for path smoothing
+        self.PREDICTION_HORIZON = 0.5  # seconds to predict person movement
+        
+        # Trajectory buffers
+        self.position_history = deque(maxlen=100)  # recent position history
+        self.velocity_history = deque(maxlen=100)  # recent velocity history
+        self.trajectory_buffer = deque(maxlen=self.TRAJECTORY_POINTS)  # planned trajectory
+        self.last_trajectory_update = 0
+        
+        # Interpolation state
+        self.current_trajectory = None
+        self.trajectory_start_time = 0
+        self.interpolation_active = False
+        
         # State variables
         self.current_speed_m1 = 0
         self.current_speed_m2 = 0
@@ -443,21 +464,37 @@ class HumanFollowingRobot:
                 self.connection_manager.connected = False
     
     def smooth_speed_transition(self, target_left: int, target_right: int) -> None:
-        """Smoothly transition to target speeds with acceleration limiting"""
-        # Calculate speed differences
-        left_diff = target_left - self.current_speed_m1
-        right_diff = target_right - self.current_speed_m2
+        """Smoothly transition to target speeds using S-curve acceleration and interpolation"""
+        current_time = time.time()
         
-        # Limit acceleration
-        left_step = max(-self.MAX_ACCELERATION, min(self.MAX_ACCELERATION, left_diff))
-        right_step = max(-self.MAX_ACCELERATION, min(self.MAX_ACCELERATION, right_diff))
-        
-        # Apply smoothing
-        new_left = self.current_speed_m1 + int(left_step * self.SMOOTHING_FACTOR)
-        new_right = self.current_speed_m2 + int(right_step * self.SMOOTHING_FACTOR)
-        
-        # Set the new speeds
-        self.set_differential_speed(new_left, new_right)
+        if self.S_CURVE_ACCEL and hasattr(self, 'last_speed_update'):
+            # Use S-curve acceleration for smooth transitions
+            time_elapsed = current_time - self.last_speed_update
+            total_time = 0.1  # 100ms transition time
+            
+            # Apply S-curve acceleration to both motors
+            new_left = self.s_curve_acceleration(self.current_speed_m1, target_left, time_elapsed, total_time)
+            new_right = self.s_curve_acceleration(self.current_speed_m2, target_right, time_elapsed, total_time)
+            
+            # Set the new speeds
+            self.set_differential_speed(new_left, new_right)
+            self.last_speed_update = current_time
+        else:
+            # Fallback to original smoothing method
+            left_diff = target_left - self.current_speed_m1
+            right_diff = target_right - self.current_speed_m2
+            
+            # Limit acceleration
+            left_step = max(-self.MAX_ACCELERATION, min(self.MAX_ACCELERATION, left_diff))
+            right_step = max(-self.MAX_ACCELERATION, min(self.MAX_ACCELERATION, right_diff))
+            
+            # Apply smoothing
+            new_left = self.current_speed_m1 + int(left_step * self.SMOOTHING_FACTOR)
+            new_right = self.current_speed_m2 + int(right_step * self.SMOOTHING_FACTOR)
+            
+            # Set the new speeds
+            self.set_differential_speed(new_left, new_right)
+            self.last_speed_update = current_time
     
     def update_smooth_person_position(self, person_x: float, person_y: float):
         """Update smoothed person position using exponential smoothing"""
@@ -467,13 +504,17 @@ class HumanFollowingRobot:
                                (1 - self.SMOOTHING_FACTOR) * self.smooth_person_y)
     
     def calculate_movement_command(self, person: PersonInfo) -> Tuple[int, int]:
-        """Calculate smooth movement command based on person position and distance"""
+        """Calculate smooth movement command using full interpolation system"""
+        current_time = time.time()
         distance = person.distance
         center_x = person.center_x
         center_y = person.center_y
         
         # Update smoothed position
         self.update_smooth_person_position(center_x, center_y)
+        
+        # Predict future person position
+        predicted_x, predicted_y = self.predict_person_position(person, self.PREDICTION_HORIZON)
         
         # Calculate distance error
         distance_error = distance - self.PERSON_FOLLOW_DISTANCE
@@ -482,7 +523,25 @@ class HumanFollowingRobot:
         image_center_x = 320
         lateral_error = self.smooth_person_x - image_center_x
         
-        # Base forward speed based on distance
+        # Generate trajectory if needed
+        if not self.interpolation_active or current_time - self.last_trajectory_update > 0.5:
+            current_pos = (self.smooth_person_x, self.smooth_person_y)
+            target_pos = (predicted_x, predicted_y)
+            current_vel = (0, 0)  # Current robot velocity
+            target_vel = (0, 0)   # Target velocity
+            
+            self.current_trajectory = self.generate_trajectory(current_pos, target_pos, current_vel, target_vel)
+            self.trajectory_start_time = current_time
+            self.last_trajectory_update = current_time
+            self.interpolation_active = True
+        
+        # Interpolate along trajectory
+        if self.interpolation_active:
+            interp_x, interp_y = self.interpolate_trajectory(current_time)
+            # Use interpolated position for more accurate following
+            lateral_error = interp_x - image_center_x
+        
+        # Base forward speed based on distance with S-curve acceleration
         if distance < self.PERSON_FOLLOW_DISTANCE:
             # Too close - back up slowly
             base_forward = -self.FORWARD_TARGET_QPPS // 3
@@ -493,26 +552,202 @@ class HumanFollowingRobot:
             # Good distance - maintain speed
             base_forward = self.FORWARD_TARGET_QPPS // 2
         
-        # Calculate turning adjustment
+        # Apply S-curve acceleration if enabled
+        if self.S_CURVE_ACCEL:
+            time_elapsed = current_time - self.trajectory_start_time
+            base_forward = self.s_curve_acceleration(self.current_speed_m1, base_forward, 
+                                                   time_elapsed, self.TRAJECTORY_TIME)
+        
+        # Calculate turning adjustment with cubic spline smoothing
         if abs(lateral_error) > self.MICRO_ADJUSTMENT_THRESHOLD:
             # Need to turn - calculate turn speed
             turn_intensity = min(abs(lateral_error) / 100.0, 1.0)  # Normalize to 0-1
+            
+            # Apply cubic spline smoothing to turn intensity
+            if self.CUBIC_SPLINE_SMOOTHING:
+                turn_intensity = self.cubic_spline_interpolation([0, 50, 100], [0, 0.5, 1.0], abs(lateral_error))
+            
             turn_speed = int(self.MICRO_TURN_QPPS * turn_intensity)
             
             if lateral_error > 0:
                 # Person is to the right - turn right (left wheel faster)
                 left_speed = base_forward + turn_speed
-                right_speed = base_forward - turn_speed
+                right_speed = -(base_forward - turn_speed)  # M2 is inverted
             else:
                 # Person is to the left - turn left (right wheel faster)
                 left_speed = base_forward - turn_speed
-                right_speed = base_forward + turn_speed
+                right_speed = -(base_forward + turn_speed)  # M2 is inverted
         else:
             # No turning needed - straight movement
             left_speed = base_forward
-            right_speed = base_forward
+            right_speed = -base_forward  # M2 is inverted
         
         return left_speed, right_speed
+    
+    def s_curve_acceleration(self, current_speed: int, target_speed: int, time_elapsed: float, total_time: float) -> int:
+        """Generate S-curve acceleration profile for smooth speed transitions"""
+        if total_time <= 0:
+            return target_speed
+            
+        # Normalize time to 0-1
+        t = min(time_elapsed / total_time, 1.0)
+        
+        # S-curve function: smooth start, linear middle, smooth end
+        if t < 0.5:
+            # First half: smooth acceleration
+            s = 2 * t * t
+        else:
+            # Second half: smooth deceleration
+            s = 1 - 2 * (1 - t) * (1 - t)
+        
+        # Interpolate between current and target speeds
+        interpolated_speed = current_speed + int((target_speed - current_speed) * s)
+        return interpolated_speed
+    
+    def cubic_spline_interpolation(self, x_points: list, y_points: list, x_new: float) -> float:
+        """Interpolate using cubic splines for smooth path following"""
+        if len(x_points) < 4:
+            # Fallback to linear interpolation if not enough points
+            return np.interp(x_new, x_points, y_points)
+        
+        try:
+            # Create cubic spline
+            cs = CubicSpline(x_points, y_points, bc_type='natural')
+            return float(cs(x_new))
+        except:
+            # Fallback to linear interpolation
+            return np.interp(x_new, x_points, y_points)
+    
+    def predict_person_position(self, person: PersonInfo, time_horizon: float) -> Tuple[float, float]:
+        """Predict future person position using velocity and acceleration analysis"""
+        current_time = time.time()
+        
+        # Add current position to history
+        self.position_history.append((current_time, person.center_x, person.center_y))
+        
+        if len(self.position_history) < 3:
+            return person.center_x, person.center_y
+        
+        # Calculate velocity from recent positions
+        recent_positions = list(self.position_history)[-5:]
+        if len(recent_positions) >= 2:
+            dt = recent_positions[-1][0] - recent_positions[-2][0]
+            if dt > 0:
+                vx = (recent_positions[-1][1] - recent_positions[-2][1]) / dt
+                vy = (recent_positions[-1][2] - recent_positions[-2][2]) / dt
+                
+                # Predict future position
+                predicted_x = person.center_x + vx * time_horizon
+                predicted_y = person.center_y + vy * time_horizon
+                
+                return predicted_x, predicted_y
+        
+        return person.center_x, person.center_y
+    
+    def generate_trajectory(self, current_pos: Tuple[float, float], target_pos: Tuple[float, float], 
+                           current_vel: Tuple[float, float], target_vel: Tuple[float, float]) -> list:
+        """Generate smooth trajectory using cubic splines and S-curve acceleration"""
+        if not self.CUBIC_SPLINE_SMOOTHING:
+            # Simple linear trajectory
+            return self.generate_linear_trajectory(current_pos, target_pos)
+        
+        # Create time points for trajectory
+        time_points = np.linspace(0, self.TRAJECTORY_TIME, self.TRAJECTORY_POINTS)
+        
+        # Generate smooth path using cubic splines
+        x_points = [current_pos[0], target_pos[0]]
+        y_points = [current_pos[1], target_pos[1]]
+        
+        # Add intermediate control points for smoother curves
+        mid_x = (current_pos[0] + target_pos[0]) / 2
+        mid_y = (current_pos[1] + target_pos[1]) / 2
+        
+        # Add slight curve for natural movement
+        curve_strength = 0.1
+        curve_x = mid_x + (target_pos[1] - current_pos[1]) * curve_strength
+        curve_y = mid_y - (target_pos[0] - current_pos[0]) * curve_strength
+        
+        x_points = [current_pos[0], curve_x, target_pos[0]]
+        y_points = [current_pos[1], curve_y, target_pos[1]]
+        
+        # Create cubic spline for path
+        try:
+            path_spline = CubicSpline([0, 0.5, 1], [x_points, y_points], axis=1)
+            
+            # Generate trajectory points
+            trajectory = []
+            for t in time_points:
+                t_norm = t / self.TRAJECTORY_TIME
+                pos = path_spline(t_norm)
+                trajectory.append((float(pos[0]), float(pos[1])))
+            
+            return trajectory
+            
+        except:
+            # Fallback to linear trajectory
+            return self.generate_linear_trajectory(current_pos, target_pos)
+    
+    def generate_linear_trajectory(self, current_pos: Tuple[float, float], target_pos: Tuple[float, float]) -> list:
+        """Generate simple linear trajectory as fallback"""
+        trajectory = []
+        for i in range(self.TRAJECTORY_POINTS):
+            t = i / (self.TRAJECTORY_POINTS - 1)
+            x = current_pos[0] + t * (target_pos[0] - current_pos[0])
+            y = current_pos[1] + t * (target_pos[1] - current_pos[1])
+            trajectory.append((x, y))
+        return trajectory
+    
+    def interpolate_trajectory(self, current_time: float) -> Tuple[float, float]:
+        """Interpolate current position along the planned trajectory"""
+        if not self.current_trajectory or len(self.current_trajectory) < 2:
+            return 0, 0
+        
+        time_elapsed = current_time - self.trajectory_start_time
+        trajectory_time = self.TRAJECTORY_TIME
+        
+        if time_elapsed >= trajectory_time:
+            # Trajectory complete
+            final_pos = self.current_trajectory[-1]
+            self.interpolation_active = False
+            return final_pos
+        
+        # Normalize time to 0-1
+        t = time_elapsed / trajectory_time
+        
+        # Use cubic spline interpolation for smooth movement
+        if len(self.current_trajectory) >= 4:
+            # Create time points for spline
+            time_points = np.linspace(0, 1, len(self.current_trajectory))
+            x_points = [pos[0] for pos in self.current_trajectory]
+            y_points = [pos[1] for pos in self.current_trajectory]
+            
+            try:
+                # Interpolate X and Y separately
+                x_spline = CubicSpline(time_points, x_points)
+                y_spline = CubicSpline(time_points, y_points)
+                
+                x_interp = float(x_spline(t))
+                y_interp = float(y_spline(t))
+                
+                return x_interp, y_interp
+            except:
+                # Fallback to linear interpolation
+                pass
+        
+        # Linear interpolation fallback
+        idx = int(t * (len(self.current_trajectory) - 1))
+        if idx >= len(self.current_trajectory) - 1:
+            return self.current_trajectory[-1]
+        
+        # Linear interpolation between two points
+        t_local = t * (len(self.current_trajectory) - 1) - idx
+        pos1 = self.current_trajectory[idx]
+        pos2 = self.current_trajectory[idx + 1]
+        
+        x_interp = pos1[0] + t_local * (pos2[0] - pos1[0])
+        y_interp = pos1[1] + t_local * (pos2[1] - pos1[1])
+        
+        return x_interp, y_interp
     
     def stop_both(self) -> None:
         """Stop both motors"""
