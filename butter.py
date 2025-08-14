@@ -1034,16 +1034,23 @@ class HumanFollowingRobot:
             lateral_error = interp_x - image_center_x
         
         # Base forward speed based on adaptive distance and velocity matching
-        if distance < adaptive_distance:
-            # Too close - back up slowly
-            base_forward = -self.FORWARD_TARGET_QPPS // 3
+        if distance < adaptive_distance - 0.2:
+            # Way too close - back up slowly for safety
+            base_forward = -self.FORWARD_TARGET_QPPS // 4
+            print(f"  🚨 Too close ({distance:.2f}m < {adaptive_distance:.2f}m) - backing up slowly")
+        elif distance < adaptive_distance:
+            # Slightly close - move forward slowly
+            base_forward = self.FORWARD_TARGET_QPPS // 4
+            print(f"  ⚠️  Close ({distance:.2f}m < {adaptive_distance:.2f}m) - moving forward slowly")
         elif distance > adaptive_distance + 0.3:
-            # Too far - move forward with velocity matching
+            # Too far - move forward quickly to catch up
             target_speed = self.match_person_velocity(person)
             base_forward = target_speed
+            print(f"  🏃 Too far ({distance:.2f}m > {adaptive_distance:.2f}m) - moving forward quickly to catch up")
         else:
             # Good distance - maintain matched speed
             base_forward = self.match_person_velocity(person)
+            print(f"  ✅ Good distance ({distance:.2f}m ≈ {adaptive_distance:.2f}m) - maintaining speed")
         
         # Apply S-curve acceleration if enabled
         if self.S_CURVE_ACCEL:
@@ -1070,20 +1077,28 @@ class HumanFollowingRobot:
                 # Person is to the right - turn right (left wheel faster)
                 left_speed = base_forward + turn_speed
                 right_speed = -(base_forward - turn_speed)  # M2 is inverted
+                print(f"  🔄 Person to right ({lateral_error:.1f}px) - turning right while moving forward")
             else:
                 # Person is to the left - turn left (right wheel faster)
                 left_speed = base_forward - turn_speed
                 right_speed = -(base_forward + turn_speed)  # M2 is inverted
+                print(f"  🔄 Person to left ({abs(lateral_error):.1f}px) - turning left while moving forward")
         else:
             # No turning needed - straight movement
             left_speed = base_forward
             right_speed = -base_forward  # M2 is inverted
+            print(f"  ➡️  Person centered - moving straight forward")
         
         # Apply context-based adjustments
         if context['recommended_behavior'] == 'cautious_following':
             # Reduce speed in high-obstacle environments
             left_speed = int(left_speed * 0.7)
             right_speed = int(right_speed * 0.7)
+            print(f"  🚧 High obstacle density - reducing speed to 70%")
+        
+        # Print final movement summary
+        movement_direction = "FORWARD" if left_speed > 0 else "BACKWARD" if left_speed < 0 else "STOPPED"
+        print(f"  🎯 Final command: {movement_direction} | Left: {left_speed}, Right: {right_speed}")
         
         return left_speed, right_speed
     
@@ -1320,8 +1335,13 @@ class HumanFollowingRobot:
         """Follow a detected person maintaining safe distance with enhanced movement"""
         distance = person.distance
         center_x = person.center_x
+        adaptive_distance = self.calculate_adaptive_distance(person)
         
-        print(f"Following person at {distance:.2f}m, center_x: {center_x:.1f}")
+        print(f"🤖 FOLLOWING PERSON:")
+        print(f"  📍 Position: {center_x:.1f}px from center")
+        print(f"  📏 Distance: {distance:.2f}m (target: {adaptive_distance:.2f}m)")
+        print(f"  🏃 Velocity: {math.sqrt(person.velocity_x**2 + person.velocity_y**2):.1f} px/s")
+        print(f"  🎯 Tracking ID: {person.tracking_id} (confidence: {person.tracking_confidence:.2f})")
         
         # Calculate enhanced movement command with obstacles context
         left_speed, right_speed = self.calculate_movement_command(person, obstacles)
