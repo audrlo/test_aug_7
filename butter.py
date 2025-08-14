@@ -735,14 +735,17 @@ class HumanFollowingRobot:
         # Assuming 640x480 image and typical person size
         estimated_mps = person_speed * 0.01  # Rough conversion factor
         
-        # Calculate target robot speed
+        # Calculate target robot speed - ALWAYS POSITIVE for forward movement
         if estimated_mps > 0.5:  # Person is walking
             target_speed = int(self.FORWARD_TARGET_QPPS * min(estimated_mps / 1.0, 1.5))
         else:  # Person is stopped or slow
             target_speed = self.FORWARD_TARGET_QPPS // 4  # Very slow following
         
+        # CRITICAL FIX: Ensure speed is ALWAYS POSITIVE for forward movement
+        target_speed = abs(target_speed)  # Force positive
+        
         # Ensure speed is within safe limits
-        return max(0, min(self.FORWARD_TARGET_QPPS, target_speed))
+        return max(100, min(self.FORWARD_TARGET_QPPS, target_speed))  # Minimum 100 QPPS
     
     def predict_person_path(self, person: PersonInfo, time_horizon: float) -> Tuple[float, float]:
         """Predict person's future position using velocity and acceleration analysis"""
@@ -1037,26 +1040,31 @@ class HumanFollowingRobot:
         if distance < adaptive_distance - 0.2:
             # Way too close - back up slowly for safety
             base_forward = -self.FORWARD_TARGET_QPPS // 4
-            print(f"  🚨 Too close ({distance:.2f}m < {adaptive_distance:.2f}m) - backing up slowly")
+            print(f"  Too close ({distance:.2f}m < {adaptive_distance:.2f}m) - backing up slowly")
         elif distance < adaptive_distance:
             # Slightly close - move forward slowly
             base_forward = self.FORWARD_TARGET_QPPS // 4
-            print(f"  ⚠️  Close ({distance:.2f}m < {adaptive_distance:.2f}m) - moving forward slowly")
+            print(f"  Close ({distance:.2f}m < {adaptive_distance:.2f}m) - moving forward slowly")
         elif distance > adaptive_distance + 0.3:
             # Too far - move forward quickly to catch up
             target_speed = self.match_person_velocity(person)
             base_forward = target_speed
-            print(f"  🏃 Too far ({distance:.2f}m > {adaptive_distance:.2f}m) - moving forward quickly to catch up")
+            print(f"  Too far ({distance:.2f}m > {adaptive_distance:.2f}m) - moving forward quickly to catch up")
         else:
             # Good distance - maintain matched speed
             base_forward = self.match_person_velocity(person)
-            print(f"  ✅ Good distance ({distance:.2f}m ≈ {adaptive_distance:.2f}m) - maintaining speed")
+            print(f"  Good distance ({distance:.2f}m ≈ {adaptive_distance:.2f}m) - maintaining speed")
         
         # Apply S-curve acceleration if enabled
         if self.S_CURVE_ACCEL:
             time_elapsed = current_time - self.trajectory_start_time
             base_forward = self.s_curve_acceleration(self.current_speed_m1, base_forward, 
                                                    time_elapsed, self.TRAJECTORY_TIME)
+        
+        # CRITICAL FIX: Ensure base_forward is never negative for forward movement
+        if base_forward < 0:
+            print(f"  WARNING: base_forward was negative ({base_forward}), forcing to positive")
+            base_forward = abs(base_forward)
         
         # Calculate turning adjustment with enhanced smoothing
         if abs(lateral_error) > self.MICRO_ADJUSTMENT_THRESHOLD:
@@ -1077,28 +1085,36 @@ class HumanFollowingRobot:
                 # Person is to the right - turn right (left wheel faster)
                 left_speed = base_forward + turn_speed
                 right_speed = -(base_forward - turn_speed)  # M2 is inverted
-                print(f"  🔄 Person to right ({lateral_error:.1f}px) - turning right while moving forward")
+                print(f"  Person to right ({lateral_error:.1f}px) - turning right while moving forward")
             else:
                 # Person is to the left - turn left (right wheel faster)
                 left_speed = base_forward - turn_speed
                 right_speed = -(base_forward + turn_speed)  # M2 is inverted
-                print(f"  🔄 Person to left ({abs(lateral_error):.1f}px) - turning left while moving forward")
+                print(f"  Person to left ({abs(lateral_error):.1f}px) - turning left while moving forward")
         else:
             # No turning needed - straight movement
             left_speed = base_forward
             right_speed = -base_forward  # M2 is inverted
-            print(f"  ➡️  Person centered - moving straight forward")
+            print(f"  Person centered - moving straight forward")
         
         # Apply context-based adjustments
         if context['recommended_behavior'] == 'cautious_following':
             # Reduce speed in high-obstacle environments
             left_speed = int(left_speed * 0.7)
             right_speed = int(right_speed * 0.7)
-            print(f"  🚧 High obstacle density - reducing speed to 70%")
+            print(f"  High obstacle density - reducing speed to 70%")
+        
+        # FINAL SAFETY CHECK: Ensure we're not going backwards when we should be going forward
+        if distance > adaptive_distance and left_speed < 0:
+            print(f"  CRITICAL ERROR: Person is in front but robot trying to go backwards!")
+            print(f"  Distance: {distance:.2f}m, Target: {adaptive_distance:.2f}m")
+            print(f"  Forcing forward movement...")
+            left_speed = abs(left_speed)  # Force positive
+            right_speed = -abs(right_speed)  # Keep M2 inverted but positive magnitude
         
         # Print final movement summary
         movement_direction = "FORWARD" if left_speed > 0 else "BACKWARD" if left_speed < 0 else "STOPPED"
-        print(f"  🎯 Final command: {movement_direction} | Left: {left_speed}, Right: {right_speed}")
+        print(f"  Final command: {movement_direction} | Left: {left_speed}, Right: {right_speed}")
         
         return left_speed, right_speed
     
@@ -1337,11 +1353,11 @@ class HumanFollowingRobot:
         center_x = person.center_x
         adaptive_distance = self.calculate_adaptive_distance(person)
         
-        print(f"🤖 FOLLOWING PERSON:")
-        print(f"  📍 Position: {center_x:.1f}px from center")
-        print(f"  📏 Distance: {distance:.2f}m (target: {adaptive_distance:.2f}m)")
-        print(f"  🏃 Velocity: {math.sqrt(person.velocity_x**2 + person.velocity_y**2):.1f} px/s")
-        print(f"  🎯 Tracking ID: {person.tracking_id} (confidence: {person.tracking_confidence:.2f})")
+        print(f"FOLLOWING PERSON:")
+        print(f"  Position: {center_x:.1f}px from center")
+        print(f"  Distance: {distance:.2f}m (target: {adaptive_distance:.2f}m)")
+        print(f"  Velocity: {math.sqrt(person.velocity_x**2 + person.velocity_y**2):.1f} px/s")
+        print(f"  Tracking ID: {person.tracking_id} (confidence: {person.tracking_confidence:.2f})")
         
         # Calculate enhanced movement command with obstacles context
         left_speed, right_speed = self.calculate_movement_command(person, obstacles)
