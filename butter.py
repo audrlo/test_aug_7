@@ -368,7 +368,7 @@ class HumanFollowingRobot:
                 print(f"  Good distance - maintaining speed")
             
             # Turning control
-            if abs(lateral_error) > 50:  # Significant lateral error
+            if abs(lateral_error) > 100:  # Increased tolerance - person can be anywhere in center 200px wide zone
                 if lateral_error > 0:
                     # Person to the right - turn right
                     turn_speed = self.TURN_QPPS
@@ -382,8 +382,8 @@ class HumanFollowingRobot:
                     left_speed = base_speed - turn_speed
                     right_speed = base_speed + turn_speed
             else:
-                # Person centered - move straight
-                print(f"  Person centered - moving straight")
+                # Person centered - move straight (within 100px tolerance)
+                print(f"  Person centered - moving straight (error: {lateral_error:.1f}px)")
                 left_speed = base_speed
                 right_speed = base_speed
             
