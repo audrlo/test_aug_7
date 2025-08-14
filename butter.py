@@ -173,10 +173,10 @@ class HumanFollowingRobot:
         # RoboClaw connection
         self.connection_manager = RoboClawConnectionManager()
         
-        # Motor control parameters
-        self.FORWARD_TARGET_QPPS = 1000  # Base forward speed
-        self.TURN_QPPS = 500             # Turning speed
-        self.RAMP_STEP_QPPS = 100        # Speed increment for ramping
+        # Motor control parameters (cut in half for smoother movement)
+        self.FORWARD_TARGET_QPPS = 500   # Base forward speed (was 1000)
+        self.TURN_QPPS = 250             # Turning speed (was 500)
+        self.RAMP_STEP_QPPS = 50         # Speed increment for ramping (was 100)
         self.RAMP_STEP_DELAY_S = 0.05    # Delay between speed steps
         
         # Obstacle avoidance
@@ -261,30 +261,47 @@ class HumanFollowingRobot:
             return False
     
     def stop_motors(self):
-        """Stop both motors"""
-        print("Stopping motors")
-        self.set_motor_speeds(0, 0)
+        """Stop both motors smoothly"""
+        print("Stopping motors smoothly")
+        self.ramp_to_speed(0, 0, duration=0.3)
         self.current_left_speed = 0
         self.current_right_speed = 0
     
     def ramp_to_speed(self, target_left, target_right, duration=0.5):
-        """Smoothly ramp to target speeds"""
+        """Smoothly ramp to target speeds, always through zero for direction changes"""
         if target_left == self.current_left_speed and target_right == self.current_right_speed:
             return
         
-        steps = max(1, int(duration / self.RAMP_STEP_DELAY_S))
-        left_step = (target_left - self.current_left_speed) / steps
-        right_step = (target_right - self.current_right_speed) / steps
+        # Check if we need to change direction (forward to backward or vice versa)
+        direction_change = False
+        if (self.current_left_speed > 0 and target_left < 0) or (self.current_left_speed < 0 and target_left > 0):
+            direction_change = True
+            print(f"Direction change detected - ramping through zero")
         
-        for i in range(steps):
-            left_speed = int(self.current_left_speed + left_step * (i + 1))
-            right_speed = int(self.current_right_speed + right_step * (i + 1))
+        if direction_change:
+            # Always ramp through zero for direction changes
+            # Phase 1: Ramp to zero
+            print(f"Phase 1: Ramping to zero")
+            self.ramp_to_speed(0, 0, duration/2)
             
-            if self.set_motor_speeds(left_speed, right_speed):
-                self.current_left_speed = left_speed
-                self.current_right_speed = right_speed
+            # Phase 2: Ramp from zero to target
+            print(f"Phase 2: Ramping from zero to target")
+            self.ramp_to_speed(target_left, target_right, duration/2)
+        else:
+            # Normal ramping (same direction)
+            steps = max(1, int(duration / self.RAMP_STEP_DELAY_S))
+            left_step = (target_left - self.current_left_speed) / steps
+            right_step = (target_right - self.current_right_speed) / steps
             
-            time.sleep(self.RAMP_STEP_DELAY_S)
+            for i in range(steps):
+                left_speed = int(self.current_left_speed + left_step * (i + 1))
+                right_speed = int(self.current_right_speed + right_step * (i + 1))
+                
+                if self.set_motor_speeds(left_speed, right_speed):
+                    self.current_left_speed = left_speed
+                    self.current_right_speed = right_speed
+                
+                time.sleep(self.RAMP_STEP_DELAY_S)
     
     def get_center_distance(self, depth_frame):
         """Get distance at image center"""
@@ -453,7 +470,9 @@ class HumanFollowingRobot:
                 # Apply movement with smoothing
                 if left_speed != self.current_left_speed or right_speed != self.current_right_speed:
                     print(f"MOVEMENT: Left={left_speed}, Right={right_speed}")
-                    self.ramp_to_speed(left_speed, right_speed, duration=0.2)
+                    # Use longer duration for smoother movement, especially for direction changes
+                    ramp_duration = 0.3 if (left_speed * self.current_left_speed < 0) else 0.2
+                    self.ramp_to_speed(left_speed, right_speed, duration=ramp_duration)
                 
                 # Small delay for control loop
                 time.sleep(0.05)
