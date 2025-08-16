@@ -7,7 +7,7 @@ import random
 
 # does this need to be here?
 
-roboclaw = Roboclaw("/dev/ttyACM0", 38400) # should this be /dev/ttyUSB0? and 38400?
+roboclaw = Roboclaw("", 38400) # should this be /dev/ttyUSB0? and 38400?
 roboclaw.Open()
 
 address = 0x80
