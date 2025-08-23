@@ -173,11 +173,11 @@ class PeopleFollowingRobot:
         # RoboClaw connection
         self.connection_manager = RoboClawConnectionManager()
         
-        # Motor control parameters - using speed 50 as requested
-        self.FORWARD_SPEED = 50          # Base forward speed
-        self.TURN_SPEED = 25             # Turning speed
-        self.BACKUP_SPEED = 15           # Backup speed
-        self.SEARCH_SPEED = 20           # Search turning speed
+        # Motor control parameters - using speed 100 (doubled from 50)
+        self.FORWARD_SPEED = 100         # Base forward speed
+        self.TURN_SPEED = 50             # Turning speed
+        self.BACKUP_SPEED = 30           # Backup speed
+        self.SEARCH_SPEED = 40           # Search turning speed
         self.RAMP_STEP_DELAY_S = 0.05    # Delay between speed steps
         
         # Obstacle avoidance
