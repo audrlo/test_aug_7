@@ -173,11 +173,11 @@ class PeopleFollowingRobot:
         # RoboClaw connection
         self.connection_manager = RoboClawConnectionManager()
         
-        # Motor control parameters - using speed 100 (doubled from 50)
-        self.FORWARD_SPEED = 100         # Base forward speed
-        self.TURN_SPEED = 75             # Turning speed
-        self.BACKUP_SPEED = 75           # Backup speed
-        self.SEARCH_SPEED = 40           # Search turning speed
+        # Motor control parameters - increased speeds for faster movement
+        self.FORWARD_SPEED = 200         # Base forward speed (doubled from 100)
+        self.TURN_SPEED = 150            # Turning speed (doubled from 75)
+        self.BACKUP_SPEED = 150          # Backup speed (doubled from 75)
+        self.SEARCH_SPEED = 80           # Search turning speed (doubled from 40)
         self.RAMP_STEP_DELAY_S = 0.05    # Delay between speed steps
         
         # Obstacle avoidance
@@ -207,6 +207,7 @@ class PeopleFollowingRobot:
         self.person_detected = False
         self.last_person_time = 0
         self.searching = False
+        self.avoiding_obstacle = False
         
     def setup(self):
         """Initialize robot systems"""
@@ -358,8 +359,19 @@ class PeopleFollowingRobot:
         
         # Priority 1: Obstacle avoidance (non-person obstacles)
         if obstacle_distance <= self.OBSTACLE_METERS:
-            print(f"OBSTACLE DETECTED: {obstacle_distance:.2f}m - STOPPING")
-            return 0, 0
+            if not self.avoiding_obstacle:
+                print(f"OBSTACLE DETECTED: {obstacle_distance:.2f}m - STARTING OBSTACLE AVOIDANCE")
+                self.avoiding_obstacle = True
+            
+            # Turn left until obstacle is clear
+            left_speed = -self.TURN_SPEED
+            right_speed = -self.TURN_SPEED
+            print(f"  Avoiding obstacle: turning left (distance: {obstacle_distance:.2f}m)")
+            return left_speed, right_speed
+        elif self.avoiding_obstacle:
+            # Obstacle cleared, resume normal operation
+            print(f"OBSTACLE CLEARED: {obstacle_distance:.2f}m - RESUMING NORMAL OPERATION")
+            self.avoiding_obstacle = False
         
         # Priority 2: Person following
         if person_info:
@@ -393,7 +405,7 @@ class PeopleFollowingRobot:
                 print(f"  Good distance - normal speed")
             
             # Turning control - turn toward person to keep them centered
-            if abs(lateral_error) > 50:  # Person can be anywhere in center 100px wide zone
+            if abs(lateral_error) > 150:  # Person can be anywhere in center 300px wide zone (increased tolerance)
                 if lateral_error > 0:
                     # Person to the right - turn right toward them
                     turn_speed = self.TURN_SPEED
