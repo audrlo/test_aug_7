@@ -392,18 +392,18 @@ class PeopleFollowingRobot:
                 base_speed = self.FORWARD_SPEED
                 print(f"  Good distance - normal speed")
             
-            # Turning control
+            # Turning control - turn toward person to keep them centered
             if abs(lateral_error) > 50:  # Person can be anywhere in center 100px wide zone
                 if lateral_error > 0:
-                    # Person to the right - turn right
+                    # Person to the right - turn right toward them
                     turn_speed = self.TURN_SPEED
-                    print(f"  Person to right - turning right while moving")
+                    print(f"  Person to right - turning right toward them")
                     left_speed = base_speed + turn_speed
                     right_speed = base_speed - turn_speed
                 else:
-                    # Person to the left - turn left
+                    # Person to the left - turn left toward them
                     turn_speed = self.TURN_SPEED
-                    print(f"  Person to left - turning left while moving")
+                    print(f"  Person to left - turning left toward them")
                     left_speed = base_speed - turn_speed
                     right_speed = base_speed + turn_speed
             else:
@@ -420,15 +420,15 @@ class PeopleFollowingRobot:
             print(f"  Final speeds: Left={left_speed}, Right={right_speed}")
             
         else:
-            # No person detected - search behavior
+            # No person detected - continue forward while searching
             if not self.searching:
                 self.searching = True
-                print("No person detected - starting search pattern")
+                print("No person detected - continuing forward while searching")
             
-            # Turn slowly in place to search
-            left_speed = -self.SEARCH_SPEED
-            right_speed = -self.SEARCH_SPEED
-            print(f"Searching: turning left slowly")
+            # Move forward while slowly turning to search
+            left_speed = self.FORWARD_SPEED - self.SEARCH_SPEED
+            right_speed = self.FORWARD_SPEED + self.SEARCH_SPEED
+            print(f"Searching: moving forward while turning left slowly")
         
         return left_speed, right_speed
     
