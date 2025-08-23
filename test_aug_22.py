@@ -175,8 +175,8 @@ class PeopleFollowingRobot:
         
         # Motor control parameters - using speed 100 (doubled from 50)
         self.FORWARD_SPEED = 100         # Base forward speed
-        self.TURN_SPEED = 50             # Turning speed
-        self.BACKUP_SPEED = 30           # Backup speed
+        self.TURN_SPEED = 75             # Turning speed
+        self.BACKUP_SPEED = 75           # Backup speed
         self.SEARCH_SPEED = 40           # Search turning speed
         self.RAMP_STEP_DELAY_S = 0.05    # Delay between speed steps
         
