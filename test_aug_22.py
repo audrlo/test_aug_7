@@ -444,9 +444,92 @@ class PeopleFollowingRobot:
         
         return left_speed, right_speed
     
+    def draw_obstacle_zone(self, image, depth_frame):
+        """Draw the 21x11 obstacle detection grid on the image"""
+        height, width = image.shape[:2]
+        center_x, center_y = width // 2, height // 2
+        
+        # Draw the scanning grid
+        for i in range(21):
+            for j in range(11):
+                x = center_x - 10 + i
+                y = center_y - 5 + j
+                
+                if 0 <= x < width and 0 <= y < height:
+                    # Get distance at this point
+                    distance = depth_frame.get_distance(x, y)
+                    if distance > 0:
+                        # Color code based on distance
+                        if distance <= self.OBSTACLE_METERS:
+                            color = (0, 0, 255)  # Red for close obstacles
+                        elif distance <= self.SLOW_METERS:
+                            color = (0, 255, 255)  # Yellow for slow zone
+                        else:
+                            color = (0, 255, 0)  # Green for safe distance
+                        
+                        cv2.circle(image, (x, y), 2, color, -1)
+        
+        # Draw center crosshair
+        cv2.line(image, (center_x-10, center_y), (center_x+10, center_y), (255, 255, 255), 2)
+        cv2.line(image, (center_x, center_y-10), (center_x, center_y+10), (255, 255, 255), 2)
+    
+    def draw_person_info(self, image, person_info):
+        """Draw person detection information on the image"""
+        x, y = int(person_info['center_x']), int(person_info['center_y'])
+        distance = person_info['distance']
+        confidence = person_info['confidence']
+        
+        # Draw bounding box (approximate)
+        box_size = 50
+        cv2.rectangle(image, (x-box_size//2, y-box_size//2), (x+box_size//2, y+box_size//2), (0, 255, 0), 2)
+        
+        # Draw center point
+        cv2.circle(image, (x, y), 5, (0, 255, 0), -1)
+        
+        # Draw distance and confidence text
+        text = f"Person: {distance:.2f}m ({confidence:.2f})"
+        cv2.putText(image, text, (x-box_size//2, y-box_size//2-10), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    
+    def draw_status_info(self, image, obstacle_distance, person_info):
+        """Draw status information on the image"""
+        height, width = image.shape[:2]
+        
+        # Background for text
+        cv2.rectangle(image, (10, 10), (400, 120), (0, 0, 0), -1)
+        cv2.rectangle(image, (10, 10), (400, 120), (255, 255, 255), 2)
+        
+        # Status text
+        y_offset = 30
+        cv2.putText(image, f"Obstacle Distance: {obstacle_distance:.2f}m", (20, y_offset), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        y_offset += 25
+        if person_info:
+            cv2.putText(image, f"Person Detected: YES", (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            y_offset += 25
+            cv2.putText(image, f"Person Distance: {person_info['distance']:.2f}m", (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        else:
+            cv2.putText(image, f"Person Detected: NO", (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        
+        y_offset += 25
+        if self.avoiding_obstacle:
+            cv2.putText(image, f"Status: AVOIDING OBSTACLE", (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        elif self.searching:
+            cv2.putText(image, f"Status: SEARCHING", (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        else:
+            cv2.putText(image, f"Status: FOLLOWING", (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    
     def run(self):
         """Main robot control loop"""
         print("Starting people following robot...")
+        print("Press 'q' to quit the viewer")
         
         try:
             while True:
@@ -460,11 +543,28 @@ class PeopleFollowingRobot:
                     time.sleep(0.1)
                     continue
                 
+                # Convert frames to numpy arrays for display
+                color_image = np.asanyarray(color_frame.get_data())
+                depth_image = np.asanyarray(depth_frame.get_data())
+                
+                # Create display image
+                display_image = color_image.copy()
+                
                 # Check for obstacles (non-person)
                 obstacle_distance = self.get_obstacle_distance(depth_frame)
                 
                 # Detect person
                 person_info = self.detect_person(color_frame, depth_frame)
+                
+                # Draw obstacle detection zone (21x11 grid)
+                self.draw_obstacle_zone(display_image, depth_frame)
+                
+                # Draw person detection info
+                if person_info:
+                    self.draw_person_info(display_image, person_info)
+                
+                # Draw status information
+                self.draw_status_info(display_image, obstacle_distance, person_info)
                 
                 # Update person detection state
                 if person_info:
@@ -485,6 +585,14 @@ class PeopleFollowingRobot:
                     # Use longer duration for smoother movement, especially for direction changes
                     ramp_duration = 0.3 if (left_speed * self.current_left_speed < 0) else 0.2
                     self.ramp_to_speed(left_speed, right_speed, duration=ramp_duration)
+                
+                # Display the image
+                cv2.imshow('Robot Vision - People Following & Obstacle Avoidance', display_image)
+                
+                # Check for key press to quit
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    print("Quit requested by user")
+                    break
                 
                 # Small delay for control loop
                 time.sleep(0.05)
