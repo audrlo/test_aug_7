@@ -259,10 +259,40 @@ class PeopleFollowingRobot:
         self.current_left_speed = 0
         self.current_right_speed = 0
     
-    def ramp_to_speed(self, target_left, target_right, duration=0.5):
-        """Smoothly ramp to target speeds"""
+    def calculate_ramp_duration(self, target_left, target_right):
+        """Calculate optimal ramp duration based on speed change magnitude"""
+        # Calculate total speed change
+        left_change = abs(target_left - self.current_left_speed)
+        right_change = abs(target_right - self.current_right_speed)
+        total_change = left_change + right_change
+        
+        # Check for direction changes
+        direction_change = False
+        if (self.current_left_speed > 0 and target_left < 0) or (self.current_left_speed < 0 and target_left > 0):
+            direction_change = True
+        if (self.current_right_speed > 0 and target_right < 0) or (self.current_right_speed < 0 and target_right > 0):
+            direction_change = True
+        
+        if direction_change:
+            # Direction changes always need longer ramps for safety
+            return 0.3
+        elif total_change < 30:  # Very small adjustment
+            return 0.02  # Almost instant
+        elif total_change < 80:  # Small adjustment
+            return 0.05  # Very fast ramp
+        elif total_change < 150:  # Medium adjustment
+            return 0.1   # Fast ramp
+        else:  # Large change
+            return 0.2   # Moderate ramp
+    
+    def ramp_to_speed(self, target_left, target_right, duration=None):
+        """Smoothly ramp to target speeds with adaptive duration"""
         if target_left == self.current_left_speed and target_right == self.current_right_speed:
             return
+        
+        # Calculate optimal ramp duration if not specified
+        if duration is None:
+            duration = self.calculate_ramp_duration(target_left, target_right)
         
         # Check if we need to change direction
         direction_change = False
@@ -579,12 +609,11 @@ class PeopleFollowingRobot:
                 # Calculate movement
                 left_speed, right_speed = self.calculate_movement(person_info, obstacle_distance)
                 
-                # Apply movement with smoothing
+                # Apply movement with adaptive smoothing
                 if left_speed != self.current_left_speed or right_speed != self.current_right_speed:
                     print(f"MOVEMENT: Left={left_speed}, Right={right_speed}")
-                    # Use longer duration for smoother movement, especially for direction changes
-                    ramp_duration = 0.3 if (left_speed * self.current_left_speed < 0) else 0.2
-                    self.ramp_to_speed(left_speed, right_speed, duration=ramp_duration)
+                    # Use adaptive ramping - small changes are almost instant, large changes are smooth
+                    self.ramp_to_speed(left_speed, right_speed)
                 
                 # Display the image
                 cv2.imshow('Robot Vision - People Following & Obstacle Avoidance', display_image)
