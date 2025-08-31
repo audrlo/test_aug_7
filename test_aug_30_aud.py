@@ -173,11 +173,11 @@ class PeopleFollowingRobot:
         # RoboClaw connection
         self.connection_manager = RoboClawConnectionManager()
         
-        # Motor control parameters - increased speeds for faster movement
+        # Motor control parameters - all speeds at least 150 for better performance
         self.FORWARD_SPEED = 400         # Base forward speed (doubled from 200)
-        self.TURN_SPEED = 300            # Turning speed (doubled from 150)
+        self.TURN_SPEED = 150            # Increased turning speed (at least 150)
         self.BACKUP_SPEED = 300          # Backup speed (doubled from 150)
-        self.SEARCH_SPEED = 160          # Search turning speed (doubled from 80)
+        self.SEARCH_SPEED = 150          # Increased search speed (at least 150)
         self.RAMP_STEP_DELAY_S = 0.05    # Delay between speed steps
         
         # Obstacle avoidance
@@ -402,9 +402,9 @@ class PeopleFollowingRobot:
                 right_speed = -self.BACKUP_SPEED
                 return left_speed, right_speed
             else:
-                # Turn left until obstacle is clear
-                left_speed = -self.TURN_SPEED
-                right_speed = -self.TURN_SPEED
+                # Turn left until obstacle is clear (at least 150 speed)
+                left_speed = -max(150, self.TURN_SPEED // 2)
+                right_speed = -max(150, self.TURN_SPEED // 2)
                 print(f"  Avoiding obstacle: turning left (distance: {obstacle_distance:.2f}m)")
                 return left_speed, right_speed
         elif self.avoiding_obstacle:
@@ -476,19 +476,19 @@ class PeopleFollowingRobot:
                 self.searching = True
                 print("No person detected - entering smart recovery mode")
             
-            # Smart recovery: turn toward where person left with tighter turns
+            # Smart recovery: turn toward where person left with speeds at least 150
             if self.person_exit_direction == -1:  # Person left to the left
-                print("Recovery: turning LEFT toward where person left (tighter turn)")
-                left_speed = -self.SEARCH_SPEED * 2  # Faster left turn
-                right_speed = self.SEARCH_SPEED * 2   # Faster right wheel forward
+                print("Recovery: turning LEFT toward where person left (speed at least 150)")
+                left_speed = -max(150, self.SEARCH_SPEED)  # Left turn at least 150
+                right_speed = max(150, self.SEARCH_SPEED)   # Right wheel forward at least 150
             elif self.person_exit_direction == 1:  # Person left to the right
-                print("Recovery: turning RIGHT toward where person left (tighter turn)")
-                left_speed = self.SEARCH_SPEED * 2    # Faster left wheel forward
-                right_speed = -self.SEARCH_SPEED * 2  # Faster right turn
+                print("Recovery: turning RIGHT toward where person left (speed at least 150)")
+                left_speed = max(150, self.SEARCH_SPEED)    # Left wheel forward at least 150
+                right_speed = -max(150, self.SEARCH_SPEED)  # Right turn at least 150
             else:  # Person left from center or unknown
-                print("Recovery: searching in center area with tighter pattern")
-                left_speed = self.FORWARD_SPEED - self.SEARCH_SPEED * 1.5
-                right_speed = self.FORWARD_SPEED + self.SEARCH_SPEED * 1.5
+                print("Recovery: searching in center area with speeds at least 150")
+                left_speed = max(150, self.FORWARD_SPEED - self.SEARCH_SPEED)
+                right_speed = max(150, self.FORWARD_SPEED + self.SEARCH_SPEED)
         
         return left_speed, right_speed
     
