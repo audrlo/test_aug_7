@@ -175,7 +175,8 @@ class PeopleFollowingRobot:
         
         # Motor control parameters - all speeds at least 150 for better performance
         self.FORWARD_SPEED = 400         # Base forward speed (doubled from 200)
-        self.TURN_SPEED = 150            # Increased turning speed (at least 150)
+        self.TURN_SPEED = 150            # Base turning speed (at least 150)
+        self.PERSON_CENTERING_SPEED = 80 # Reduced speed specifically for person centering
         self.BACKUP_SPEED = 300          # Backup speed (doubled from 150)
         self.SEARCH_SPEED = 150          # Increased search speed (at least 150)
         self.RAMP_STEP_DELAY_S = 0.05    # Delay between speed steps
@@ -210,6 +211,10 @@ class PeopleFollowingRobot:
         self.avoiding_obstacle = False
         self.last_person_x = 320  # Track last known person position for recovery
         self.person_exit_direction = 0  # -1 for left, 0 for center, 1 for right
+        
+        # Position smoothing for stable person tracking
+        self.person_x_history = [320] * 5  # Store last 5 person positions
+        self.smoothed_person_x = 320  # Smoothed person position
         
     def setup(self):
         """Initialize robot systems"""
@@ -346,6 +351,18 @@ class PeopleFollowingRobot:
         
         return min_distance
     
+    def smooth_person_position(self, new_x):
+        """Smooth person position using moving average to reduce jitter"""
+        # Add new position to history
+        self.person_x_history.append(new_x)
+        # Keep only last 5 positions
+        if len(self.person_x_history) > 5:
+            self.person_x_history.pop(0)
+        
+        # Calculate smoothed position (simple moving average)
+        self.smoothed_person_x = sum(self.person_x_history) / len(self.person_x_history)
+        return self.smoothed_person_x
+
     def detect_person(self, color_frame, depth_frame):
         """Detect person using YOLO and return position/distance"""
         if not color_frame or not depth_frame:
@@ -375,8 +392,10 @@ class PeopleFollowingRobot:
                         distance = depth_frame.get_distance(int(center_x), int(center_y))
                         if distance > 0 and distance < min_distance:
                             min_distance = distance
+                            # Smooth the person position to reduce jitter
+                            smoothed_center_x = self.smooth_person_position(center_x)
                             closest_person = {
-                                'center_x': center_x,
+                                'center_x': smoothed_center_x,
                                 'center_y': center_y,
                                 'distance': distance,
                                 'confidence': float(box.conf[0])
@@ -444,17 +463,17 @@ class PeopleFollowingRobot:
                 print(f"  Good distance - full speed")
             
             # Turning control - turn toward person to keep them centered
-            if abs(lateral_error) > 150:  # Person can be anywhere in center 300px wide zone (increased tolerance)
+            if abs(lateral_error) > 200:  # Person can be anywhere in center 400px wide zone (increased from 300px) (increased tolerance)
                 if lateral_error > 0:
-                    # Person to the right - turn right toward them
-                    turn_speed = self.TURN_SPEED
-                    print(f"  Person to right - turning right toward them")
+                    # Person to the right - turn right toward them (slower for stability)
+                    turn_speed = self.PERSON_CENTERING_SPEED
+                    print(f"  Person to right - turning right toward them (slow and stable)")
                     left_speed = base_speed + turn_speed
                     right_speed = base_speed - turn_speed
                 else:
-                    # Person to the left - turn left toward them
-                    turn_speed = self.TURN_SPEED
-                    print(f"  Person to left - turning left toward them")
+                    # Person to the left - turn left toward them (slower for stability)
+                    turn_speed = self.PERSON_CENTERING_SPEED
+                    print(f"  Person to left - turning left toward them (slow and stable)")
                     left_speed = base_speed - turn_speed
                     right_speed = base_speed + turn_speed
             else:
