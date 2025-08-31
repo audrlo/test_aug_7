@@ -173,17 +173,16 @@ class PeopleFollowingRobot:
         # RoboClaw connection
         self.connection_manager = RoboClawConnectionManager()
         
-        # Motor control parameters - all speeds at least 150 for better performance
-        self.FORWARD_SPEED = 400         # Base forward speed (doubled from 200)
-        self.TURN_SPEED = 150            # Base turning speed (at least 150)
-        self.PERSON_CENTERING_SPEED = 80 # Reduced speed specifically for person centering
-        self.BACKUP_SPEED = 300          # Backup speed (doubled from 150)
-        self.SEARCH_SPEED = 150          # Increased search speed (at least 150)
+        # Motor control parameters - increased speeds for faster movement
+        self.FORWARD_SPEED = 200         # Base forward speed (doubled from 100)
+        self.TURN_SPEED = 150            # Turning speed (doubled from 75)
+        self.BACKUP_SPEED = 150          # Backup speed (doubled from 75)
+        self.SEARCH_SPEED = 80           # Search turning speed (doubled from 40)
         self.RAMP_STEP_DELAY_S = 0.05    # Delay between speed steps
         
         # Obstacle avoidance
-        self.OBSTACLE_METERS = 0.3       # Stop distance for obstacles (reduced from 0.5)
-        self.SLOW_METERS = 1.5           # Slow down distance (increased from 1.0)
+        self.OBSTACLE_METERS = 0.5       # Stop distance for obstacles
+        self.SLOW_METERS = 1.0           # Slow down distance
         
         # Person following
         self.PERSON_STOP_DISTANCE = 0.5   # Stop distance from person
@@ -209,12 +208,6 @@ class PeopleFollowingRobot:
         self.last_person_time = 0
         self.searching = False
         self.avoiding_obstacle = False
-        self.last_person_x = 320  # Track last known person position for recovery
-        self.person_exit_direction = 0  # -1 for left, 0 for center, 1 for right
-        
-        # Position smoothing for stable person tracking
-        self.person_x_history = [320] * 5  # Store last 5 person positions
-        self.smoothed_person_x = 320  # Smoothed person position
         
     def setup(self):
         """Initialize robot systems"""
@@ -332,37 +325,25 @@ class PeopleFollowingRobot:
                 time.sleep(self.RAMP_STEP_DELAY_S)
     
     def get_obstacle_distance(self, depth_frame):
-        """Scan 31x21 pixel grid around center for obstacles (increased from 21x11)"""
+        """Scan 21x11 pixel grid around center for obstacles"""
         if not depth_frame:
             return float('inf')
         
         width = depth_frame.get_width()
         height = depth_frame.get_height()
         
-        # Scan 31x21 grid around center (increased coverage)
+        # Scan 21x11 grid around center
         min_distance = float('inf')
-        for i in range(31):
-            for j in range(21):
-                x = (width // 2) - 15 + i
-                y = (height // 2) - 10 + j
+        for i in range(21):
+            for j in range(11):
+                x = (width // 2) - 10 + i
+                y = (height // 2) - 5 + j
                 distance = depth_frame.get_distance(x, y)
                 if distance > 0:
                     min_distance = min(distance, min_distance)
         
         return min_distance
     
-    def smooth_person_position(self, new_x):
-        """Smooth person position using moving average to reduce jitter"""
-        # Add new position to history
-        self.person_x_history.append(new_x)
-        # Keep only last 5 positions
-        if len(self.person_x_history) > 5:
-            self.person_x_history.pop(0)
-        
-        # Calculate smoothed position (simple moving average)
-        self.smoothed_person_x = sum(self.person_x_history) / len(self.person_x_history)
-        return self.smoothed_person_x
-
     def detect_person(self, color_frame, depth_frame):
         """Detect person using YOLO and return position/distance"""
         if not color_frame or not depth_frame:
@@ -392,10 +373,8 @@ class PeopleFollowingRobot:
                         distance = depth_frame.get_distance(int(center_x), int(center_y))
                         if distance > 0 and distance < min_distance:
                             min_distance = distance
-                            # Smooth the person position to reduce jitter
-                            smoothed_center_x = self.smooth_person_position(center_x)
                             closest_person = {
-                                'center_x': smoothed_center_x,
+                                'center_x': center_x,
                                 'center_y': center_y,
                                 'distance': distance,
                                 'confidence': float(box.conf[0])
@@ -414,18 +393,11 @@ class PeopleFollowingRobot:
                 print(f"OBSTACLE DETECTED: {obstacle_distance:.2f}m - STARTING OBSTACLE AVOIDANCE")
                 self.avoiding_obstacle = True
             
-            # If very close (within 0.3m), backup first then turn
-            if obstacle_distance <= 0.3:
-                print(f"  Very close obstacle: backing up first (distance: {obstacle_distance:.2f}m)")
-                left_speed = -self.BACKUP_SPEED
-                right_speed = -self.BACKUP_SPEED
-                return left_speed, right_speed
-            else:
-                # Turn left until obstacle is clear (at least 150 speed)
-                left_speed = -max(150, self.TURN_SPEED // 2)
-                right_speed = -max(150, self.TURN_SPEED // 2)
-                print(f"  Avoiding obstacle: turning left (distance: {obstacle_distance:.2f}m)")
-                return left_speed, right_speed
+            # Turn left until obstacle is clear
+            left_speed = -self.TURN_SPEED
+            right_speed = -self.TURN_SPEED
+            print(f"  Avoiding obstacle: turning left (distance: {obstacle_distance:.2f}m)")
+            return left_speed, right_speed
         elif self.avoiding_obstacle:
             # Obstacle cleared, resume normal operation
             print(f"OBSTACLE CLEARED: {obstacle_distance:.2f}m - RESUMING NORMAL OPERATION")
@@ -444,36 +416,36 @@ class PeopleFollowingRobot:
             print(f"  Distance: {person_distance:.2f}m")
             print(f"  Position: {person_x:.1f}px from center (error: {lateral_error:.1f}px)")
             
-            # Distance control - less aggressive speed reduction for faster movement
+            # Distance control
             if person_distance < self.PERSON_BACKUP_DISTANCE:
-                # Too close - back away at moderate speed
-                base_speed = -self.BACKUP_SPEED // 2  # Reduced backup speed
-                print(f"  Too close - backing away at moderate speed")
+                # Too close - back away slowly
+                base_speed = -self.BACKUP_SPEED
+                print(f"  Too close - backing away slowly")
             elif person_distance < self.PERSON_STOP_DISTANCE:
-                # Very close - slow forward instead of stopping
-                base_speed = self.FORWARD_SPEED // 4  # Very slow forward
-                print(f"  Very close - moving very slowly forward")
+                # Very close - stop
+                base_speed = 0
+                print(f"  Very close - stopping")
             elif person_distance < self.PERSON_SLOW_DISTANCE:
-                # Close - moderate speed instead of half speed
-                base_speed = self.FORWARD_SPEED * 3 // 4  # 75% of full speed
-                print(f"  Close - moving at moderate speed")
+                # Close - slow down
+                base_speed = self.FORWARD_SPEED // 2
+                print(f"  Close - slowing down")
             else:
-                # Good distance - full speed
+                # Good distance - normal speed
                 base_speed = self.FORWARD_SPEED
-                print(f"  Good distance - full speed")
+                print(f"  Good distance - normal speed")
             
             # Turning control - turn toward person to keep them centered
-            if abs(lateral_error) > 200:  # Person can be anywhere in center 400px wide zone (increased from 300px) (increased tolerance)
+            if abs(lateral_error) > 150:  # Person can be anywhere in center 300px wide zone (increased tolerance)
                 if lateral_error > 0:
-                    # Person to the right - turn right toward them (slower for stability)
-                    turn_speed = self.PERSON_CENTERING_SPEED
-                    print(f"  Person to right - turning right toward them (slow and stable)")
+                    # Person to the right - turn right toward them
+                    turn_speed = self.TURN_SPEED
+                    print(f"  Person to right - turning right toward them")
                     left_speed = base_speed + turn_speed
                     right_speed = base_speed - turn_speed
                 else:
-                    # Person to the left - turn left toward them (slower for stability)
-                    turn_speed = self.PERSON_CENTERING_SPEED
-                    print(f"  Person to left - turning left toward them (slow and stable)")
+                    # Person to the left - turn left toward them
+                    turn_speed = self.TURN_SPEED
+                    print(f"  Person to left - turning left toward them")
                     left_speed = base_speed - turn_speed
                     right_speed = base_speed + turn_speed
             else:
@@ -490,37 +462,28 @@ class PeopleFollowingRobot:
             print(f"  Final speeds: Left={left_speed}, Right={right_speed}")
             
         else:
-            # No person detected - smart recovery mode based on exit direction
+            # No person detected - continue forward while searching
             if not self.searching:
                 self.searching = True
-                print("No person detected - entering smart recovery mode")
+                print("No person detected - continuing forward while searching")
             
-            # Smart recovery: turn toward where person left with speeds at least 150
-            if self.person_exit_direction == -1:  # Person left to the left
-                print("Recovery: turning LEFT toward where person left (speed at least 150)")
-                left_speed = -max(150, self.SEARCH_SPEED)  # Left turn at least 150
-                right_speed = max(150, self.SEARCH_SPEED)   # Right wheel forward at least 150
-            elif self.person_exit_direction == 1:  # Person left to the right
-                print("Recovery: turning RIGHT toward where person left (speed at least 150)")
-                left_speed = max(150, self.SEARCH_SPEED)    # Left wheel forward at least 150
-                right_speed = -max(150, self.SEARCH_SPEED)  # Right turn at least 150
-            else:  # Person left from center or unknown
-                print("Recovery: searching in center area with speeds at least 150")
-                left_speed = max(150, self.FORWARD_SPEED - self.SEARCH_SPEED)
-                right_speed = max(150, self.FORWARD_SPEED + self.SEARCH_SPEED)
+            # Move forward while slowly turning to search
+            left_speed = self.FORWARD_SPEED - self.SEARCH_SPEED
+            right_speed = self.FORWARD_SPEED + self.SEARCH_SPEED
+            print(f"Searching: moving forward while turning left slowly")
         
         return left_speed, right_speed
     
     def draw_obstacle_zone(self, image, depth_frame):
-        """Draw the 31x21 obstacle detection grid on the image (increased from 21x11)"""
+        """Draw the 21x11 obstacle detection grid on the image"""
         height, width = image.shape[:2]
         center_x, center_y = width // 2, height // 2
         
-        # Draw the scanning grid (31x21)
-        for i in range(31):
-            for j in range(21):
-                x = center_x - 15 + i
-                y = center_y - 10 + j
+        # Draw the scanning grid
+        for i in range(21):
+            for j in range(11):
+                x = center_x - 10 + i
+                y = center_y - 5 + j
                 
                 if 0 <= x < width and 0 <= y < height:
                     # Get distance at this point
@@ -537,8 +500,8 @@ class PeopleFollowingRobot:
                         cv2.circle(image, (x, y), 2, color, -1)
         
         # Draw center crosshair
-        cv2.line(image, (center_x-15, center_y), (center_x+15, center_y), (255, 255, 255), 2)
-        cv2.line(image, (center_x, center_y-15), (center_x, center_y+15), (255, 255, 255), 2)
+        cv2.line(image, (center_x-10, center_y), (center_x+10, center_y), (255, 255, 255), 2)
+        cv2.line(image, (center_x, center_y-10), (center_x, center_y+10), (255, 255, 255), 2)
     
     def draw_person_info(self, image, person_info):
         """Draw person detection information on the image"""
@@ -623,7 +586,7 @@ class PeopleFollowingRobot:
                 # Detect person
                 person_info = self.detect_person(color_frame, depth_frame)
                 
-                # Draw obstacle detection zone (31x21 grid)
+                # Draw obstacle detection zone (21x11 grid)
                 self.draw_obstacle_zone(display_image, depth_frame)
                 
                 # Draw person detection info
@@ -637,23 +600,10 @@ class PeopleFollowingRobot:
                 if person_info:
                     self.person_detected = True
                     self.last_person_time = time.time()
-                    self.last_person_x = person_info['center_x']  # Track person position
                     self.searching = False
                 else:
                     # Person lost if not seen for 2 seconds
                     if time.time() - self.last_person_time > 2.0:
-                        if self.person_detected:  # Just lost person
-                            # Determine exit direction based on last known position
-                            image_center = 320
-                            if self.last_person_x < image_center - 50:  # Left side
-                                self.person_exit_direction = -1
-                                print(f"Person left frame to the LEFT (last position: {self.last_person_x:.1f})")
-                            elif self.last_person_x > image_center + 50:  # Right side
-                                self.person_exit_direction = 1
-                                print(f"Person left frame to the RIGHT (last position: {self.last_person_x:.1f})")
-                            else:  # Center
-                                self.person_exit_direction = 0
-                                print(f"Person left frame from CENTER (last position: {self.last_person_x:.1f})")
                         self.person_detected = False
                 
                 # Calculate movement
